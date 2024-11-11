@@ -30,6 +30,6 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/')
       with:
         files: |
-          ${{ matrix.os == 'windows-latest' && 'your_program.exe' || 'your_program' }} 
+          ${{ matrix.os == 'windows-latest' && 'mbox2eml.exe' || 'mbox2eml' }} 
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,38 @@
+name: Build and Upload Binaries
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Make for Windows
+      if: runner.os == 'Windows'
+      run: |
+        choco install make
+        echo "::add-path::C:\ProgramData\chocolatey\bin"
+
+    - name: Run Makefile
+      run: |
+        make
+      shell: bash
+
+    - name: Upload binary artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ runner.os }}-binary
+        path: |
+          ./mbox2eml* # Replace with the actual path or pattern of your binaries

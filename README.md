@@ -19,3 +19,22 @@ To build the tool, run the following commands:
 ```sh
 make
 ```
+## Usage
+
+To convert an mbox file to individual eml files, use the following command:
+
+```sh
+
+./mbox2eml <mbox_file> <output_directory>
+
+```
+
+## Example
+
+./mbox2eml myemails.mbox output_emails
+
+This will extract emails from myemails.mbox and save them into the output_emails directory.
+
+
+
+

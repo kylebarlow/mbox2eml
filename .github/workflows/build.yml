@@ -13,17 +13,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest]
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Set up Make for Windows
-      if: runner.os == 'Windows'
-      run: |
-        choco install make
-        echo "::add-path::C:\ProgramData\chocolatey\bin"
+
 
     - name: Run Makefile
       run: |
@@ -35,4 +31,4 @@ jobs:
       with:
         name: ${{ runner.os }}-binary
         path: |
-          ./mbox2eml* # Replace with the actual path or pattern of your binaries
+          ./mbox2eml # Replace with the actual path or pattern of your binaries

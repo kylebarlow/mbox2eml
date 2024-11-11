@@ -7,7 +7,7 @@ SRC = mbox2eml.cc
 all: $(TARGET)
 
 $(TARGET): $(SRC)
-    $(CXX) $(CXXFLAGS) -o $(TARGET) $(SRC)
+	$(CXX) $(CXXFLAGS) -o $(TARGET) $(SRC)
 
 clean:
-    rm -f $(TARGET)
+	rm -f $(TARGET)

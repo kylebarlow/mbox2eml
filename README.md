@@ -1,6 +1,21 @@
 # mbox2eml
-convert mbox from google takeout to eml
 
-# Usage
+A simple tool to convert mbox files from Google Takeout to a folder of eml files.
 
-mbox2eml file.mbx dir
+## Features
+
+- Extracts emails from an mbox file into a folder
+- Utilizes multithreading for efficient processing
+
+## Requirements
+
+- C++ compiler supporting C++23
+- Make
+
+## Building
+
+To build the tool, run the following commands:
+
+```sh
+make
+```

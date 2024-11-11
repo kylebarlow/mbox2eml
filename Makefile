@@ -1,7 +1,7 @@
 CXX = g++
 CXXFLAGS = -O3 -std=c++20 -pthread
 
-TARGET = ./build/mbox2eml
+TARGET = mbox2eml
 SRC = mbox2eml.cc
 
 all: $(TARGET)

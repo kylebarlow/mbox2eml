@@ -16,7 +16,7 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v2
 
-    - name: Set up C++ environment
+    - name: Set up C++ 
       run: sudo apt-get install g++ cmake # for Linux and macOS
       if: runner.os != 'Windows'
     - name: Set up C++ environment for Windows

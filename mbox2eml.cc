@@ -1,6 +1,36 @@
 //////////////////////////////////////////////////////
 ///// main entry point for mbox2eml.cc
 /////////////////////////////////////////////////////
+// Copyright (c) Bishoy H.
+// 
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+// 
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+// 
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+//
+// Description:
+// This tool, mbox2eml, is designed to extract individual email messages from an
+// mbox file and save them as separate .eml files in a given folder. It utilizes multithreading to
+// speed up the processing of large mbox files by distributing the workload across
+// multiple CPU cores, but it requires enough memory to load the mbox file. The tool takes two command-line arguments: the path to the
+// mbox file and the output directory where the .eml files will be saved.
+
+// Compile with  g++ -O3 -std=c++23 -pthread -lstdc++fs -o mbox2eml mbox2eml.cc 
+
+
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -8,8 +38,6 @@
 #include <thread>
 #include <mutex>
 #include <filesystem>
-
-// Compile with  g++ -O3 -std=c++23 -pthread -lstdc++fs -o mbox2eml mbox2eml.cc 
 
 namespace fs = std::filesystem;
 
@@ -26,7 +54,7 @@ std::vector<Email> extractEmails(const std::string& mbox_file) {
   Email current_email;
 
   while (std::getline(file, line)) {
-    if (line.starts_with("From ")) {
+    if (line.starts_with("From ")) { // use c++20 feature
       // Start of a new email
       if (!current_email.content.empty()) {
         emails.push_back(current_email);
@@ -67,6 +95,8 @@ void workerThread(const std::vector<Email>& emails, const std::string& output_di
 int main(int argc, char* argv[]) {
   // Check for correct number of arguments
   if (argc != 3) {
+    std::cerr << "mbox2eml: Extract individual email messages from an mbox file and save them as separate .eml files." << std::endl;
+    std::cerr << "Error: Incorrect number of arguments." << std::endl;
     std::cerr << "Usage: " << argv[0] << " <mbox_file> <output_directory>" << std::endl;
     return 1;
   }
@@ -75,8 +105,12 @@ int main(int argc, char* argv[]) {
   std::string output_dir = argv[2];
 
   // Create the output directory if it doesn't exist
+  try {
   fs::create_directory(output_dir);
-
+  } catch (const std::exception& e) {
+    std::cerr << "Error creating output directory: " << e.what() << std::endl;
+    return 1;
+  }
   // Extract emails from the mbox file
   std::vector<Email> emails = extractEmails(mbox_file);
   std::cout << "Extracted " << emails.size() << " emails." << std::endl;

@@ -1,77 +1,39 @@
-name: Build and Release Binaries
+name: Build and Upload Binaries
 
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest]
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Set up C++ environment for Linux/macOS
-      run: sudo apt-get install g++ cmake
-      if: runner.os != 'Windows'
 
-    - name: Set up C++ environment for Windows
-      run: choco install mingw cmake
-      if: runner.os == 'Windows'
 
-    - name: Build mbox2eml
+    - name: Run Makefile
       run: |
         mkdir -p build
-        cd build
-        cmake ..
-        cmake --build .
+        make
+        cp mbox2eml ./build
       shell: bash
 
     - name: Upload binary artifact
       uses: actions/upload-artifact@v3
       with:
-        name: mbox2eml-${{ matrix.os }}
-        path: build/mbox2eml
-
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
-
-    - name: Download binaries
-      uses: actions/download-artifact@v3
-      with:
-        name: mbox2eml-ubuntu-latest
-        path: mbox2eml-ubuntu-latest
-    - name: Download binaries for macOS
-      uses: actions/download-artifact@v3
-      with:
-        name: mbox2eml-macos-latest
-        path: mbox2eml-macos-latest
-    - name: Download binaries for Windows
-      uses: actions/download-artifact@v3
-      with:
-        name: mbox2eml-windows-latest
-        path: mbox2eml-windows-latest
-
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
-        draft: false
-        prerelease: false
-
+        name: ${{ runner.os }}-binary
+        path: |
+          build/* 
     - name: Upload Release Asset for Linux
       uses: actions/upload-release-asset@v1
       env:
@@ -90,14 +52,4 @@ jobs:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
         asset_path: mbox2eml-macos-latest/mbox2eml
         asset_name: mbox2eml-macos-latest
-        asset_content_type: application/octet-stream
-
-    - name: Upload Release Asset for Windows
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: mbox2eml-windows-latest/mbox2eml.exe
-        asset_name: mbox2eml-windows-latest
         asset_content_type: application/octet-stream

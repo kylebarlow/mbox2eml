@@ -1,5 +1,5 @@
 CXX = g++
-CXXFLAGS = -O3 -std=c++20 -pthread -lstdc++fs
+CXXFLAGS = -O3 -std=c++20 -pthread
 
 TARGET = mbox2eml
 SRC = mbox2eml.cc

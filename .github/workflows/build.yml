@@ -31,4 +31,4 @@ jobs:
       with:
         name: ${{ runner.os }}-binary
         path: |
-          build/mbox2eml # Replace with the actual path or pattern of your binaries
+          build/* 

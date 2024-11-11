@@ -1,4 +1,8 @@
 CXX = g++
+# if not macOS link statically with libstdc++
+ifeq ($(shell uname),Darwin)
+CXXFLAGS = -O3 -std=c++20 -pthread
+else
 CXXFLAGS = -O3 -std=c++20 -pthread -static
 
 TARGET = mbox2eml

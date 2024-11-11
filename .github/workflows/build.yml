@@ -1,9 +1,9 @@
-name: Build and Release 
+name: Build and Release
 
 on:
   release:
     types: [published]
-    
+
 jobs:
   build:
     runs-on: ${{ matrix.os }}
@@ -12,68 +12,68 @@ jobs:
         os: [ubuntu-latest, macos-latest]
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-  
-    - name: Build mbox2eml
-      run: |
-        mkdir -p build
-        make
-        cp mbox2eml build/mbox2eml
-      shell: bash
+      - name: Build mbox2eml
+        run: |
+          mkdir -p build
+          make
+          cp mbox2eml build/mbox2eml
+        shell: bash
 
-    - name: Upload binary artifact
-      uses: actions/upload-artifact@v3
-      with:
-        name: mbox2eml-${{ matrix.os }}
-        path: build/mbox2eml
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: mbox2eml-${{ matrix.os }}
+          path: build/mbox2eml
 
   release:
     needs: build
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Download binaries
-      uses: actions/download-artifact@v3
-      with:
-        name: mbox2eml-ubuntu-latest
-        path: mbox2eml-ubuntu-latest
-    - name: Download binaries for macOS
-      uses: actions/download-artifact@v3
-      with:
-        name: mbox2eml-macos-latest
-        path: mbox2eml-macos-latest
+      - name: Download binaries
+        uses: actions/download-artifact@v3
+        with:
+          name: mbox2eml-ubuntu-latest
+          path: mbox2eml-ubuntu-latest
 
-    - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
-        draft: false
-        prerelease: false
+      - name: Download binaries for macOS
+        uses: actions/download-artifact@v3
+        with:
+          name: mbox2eml-macos-latest
+          path: mbox2eml-macos-latest
 
-    - name: Upload Release Asset for Linux
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: mbox2eml-ubuntu-latest/mbox2eml
-        asset_name: mbox2eml-ubuntu-latest
-        asset_content_type: application/octet-stream
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
 
-    - name: Upload Release Asset for macOS
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: mbox2eml-macos-latest/mbox2eml
-        asset_name: mbox2eml-macos-latest
-        asset_content_type: application/octet-stream
+      - name: Upload Release Asset for Linux
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: mbox2eml-ubuntu-latest/mbox2eml
+          asset_name: mbox2eml-linux 
+          asset_content_type: application/octet-stream
+
+      - name: Upload Release Asset for macOS
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: mbox2eml-macos-latest/mbox2eml
+          asset_name: mbox2eml-macos
+          asset_content_type: application/octet-stream

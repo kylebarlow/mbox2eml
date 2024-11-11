@@ -80,8 +80,3 @@ jobs:
         asset_path: mbox2eml-macos-latest/mbox2eml
         asset_name: mbox2eml-macos-latest
         asset_content_type: application/octet-stream
-
- 
-        asset_path: mbox2eml-windows-latest/mbox2eml.exe
-        asset_name: mbox2eml-windows-latest
-        asset_content_type: application/octet-stream

@@ -49,11 +49,6 @@ jobs:
       with:
         name: mbox2eml-macos-latest
         path: mbox2eml-macos-latest
-    - name: Download binaries for Windows
-      uses: actions/download-artifact@v3
-      with:
-        name: mbox2eml-windows-latest
-        path: mbox2eml-windows-latest
 
     - name: Create Release
       id: create_release

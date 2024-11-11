@@ -33,7 +33,42 @@ jobs:
       with:
         name: ${{ runner.os }}-binary
         path: |
-          build/* 
+          build/mbox2eml
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Download binaries
+      uses: actions/download-artifact@v3
+      with:
+        name: mbox2eml-ubuntu-latest
+        path: mbox2eml-ubuntu-latest
+    - name: Download binaries for macOS
+      uses: actions/download-artifact@v3
+      with:
+        name: mbox2eml-macos-latest
+        path: mbox2eml-macos-latest
+    - name: Download binaries for Windows
+      uses: actions/download-artifact@v3
+      with:
+        name: mbox2eml-windows-latest
+        path: mbox2eml-windows-latest
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        draft: false
+        prerelease: false
+
     - name: Upload Release Asset for Linux
       uses: actions/upload-release-asset@v1
       env:
@@ -53,3 +88,5 @@ jobs:
         asset_path: mbox2eml-macos-latest/mbox2eml
         asset_name: mbox2eml-macos-latest
         asset_content_type: application/octet-stream
+          
+

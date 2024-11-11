@@ -86,12 +86,7 @@ jobs:
         asset_name: mbox2eml-macos-latest
         asset_content_type: application/octet-stream
 
-    - name: Upload Release Asset for Windows
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
+ 
         asset_path: mbox2eml-windows-latest/mbox2eml.exe
         asset_name: mbox2eml-windows-latest
         asset_content_type: application/octet-stream

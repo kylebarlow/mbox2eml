@@ -1,4 +1,4 @@
-name: Build and Release
+name: Build and Release C++ 
 
 on:
   push:
@@ -18,9 +18,9 @@ jobs:
     - uses: actions/checkout@v3
 
     - name: Setup C++ environment
-      uses: actions/setup-cpp@v3
+      uses: actions/setup-cpp@v3  # Corrected action name
       with:
-        cpp-version: 'gnu-latest'  # Or specify a specific version
+        cpp-version: 'gnu-latest' 
 
     - name: Build with Make
       run: make
@@ -30,6 +30,6 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/')
       with:
         files: |
-          ${{ matrix.os == 'windows-latest' && 'mbox2eml.exe' || 'mbox2eml' }} 
+          ${{ matrix.os == 'windows-latest' && 'your_program.exe' || 'your_program' }} 
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

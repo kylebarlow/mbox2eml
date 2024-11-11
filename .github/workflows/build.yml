@@ -1,12 +1,9 @@
 name: Build and Release 
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
+  release:
+    types: [created, published]
+    
 jobs:
   build:
     runs-on: ${{ matrix.os }}

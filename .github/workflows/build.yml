@@ -2,66 +2,34 @@ name: Build and Release
 
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest, macOS-latest]
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
+    - uses: actions/checkout@v3
 
-    - name: Set up C++ 
-      run: sudo apt-get install g++ cmake # for Linux and macOS
-      if: runner.os != 'Windows'
-    - name: Set up C++ environment for Windows
-      run: choco install mingw cmake # for Windows
-      if: runner.os == 'Windows'
-
-    - name: Build mbox2eml
-      run: |
-        mkdir build
-        cd build
-        cmake ..
-        cmake --build .
-
-    - name: Archive binary
-      uses: actions/upload-artifact@v3
+    - name: Setup C++ environment
+      uses: actions/setup-cpp@v3
       with:
-        name: mbox2eml-${{ matrix.os }}
-        path: build/mbox2eml
+        cpp-version: 'gnu-latest'  # Or specify a specific version
 
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-    - name: Download binaries
-      uses: actions/download-artifact@v3
-      with:
-        name: mbox2eml-${{ matrix.os }}
+    - name: Build with Make
+      run: make
 
     - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
+      uses: softprops/action-gh-release@v1
+      if: startsWith(github.ref, 'refs/tags/')
+      with:
+        files: |
+          ${{ matrix.os == 'windows-latest' && 'mbox2eml.exe' || 'mbox2eml' }} 
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
-        draft: false
-        prerelease: false
-
-    - name: Upload Release Asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: mbox2eml-${{ matrix.os }}
-        asset_name: mbox2eml-${{ matrix.os }}
-        asset_content_type: application/octet-stream

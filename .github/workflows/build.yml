@@ -17,7 +17,11 @@ jobs:
       uses: actions/checkout@v2
 
     - name: Set up C++ environment
-      uses: actions/setup-cpp@v1
+      run: sudo apt-get install g++ cmake # for Linux and macOS
+      if: runner.os != 'Windows'
+    - name: Set up C++ environment for Windows
+      run: choco install mingw cmake # for Windows
+      if: runner.os == 'Windows'
 
     - name: Build mbox2eml
       run: |
@@ -27,7 +31,7 @@ jobs:
         cmake --build .
 
     - name: Archive binary
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: mbox2eml-${{ matrix.os }}
         path: build/mbox2eml
@@ -37,7 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Download binaries
-      uses: actions/download-artifact@v2
+      uses: actions/download-artifact@v3
       with:
         name: mbox2eml-${{ matrix.os }}
 

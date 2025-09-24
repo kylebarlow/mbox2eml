@@ -22,13 +22,16 @@
 // THE SOFTWARE.
 //
 // Description:
-// This tool, mbox2eml, is designed to extract individual email messages from an
-// mbox file and save them as separate .eml files in a given folder. It utilizes multithreading to
-// speed up the processing of large mbox files by distributing the workload across
-// multiple CPU cores, but it requires enough memory to load the mbox file. The tool takes two command-line arguments: the path to the
-// mbox file and the output directory where the .eml files will be saved.
+// This tool, mbox2eml, is designed to extract individual email messages from
+// chunked mbox files and save them as separate gzip-compressed .eml.gz files in Maildir-compatible format. 
+// It processes multiple mbox files named chunk_0.mbox, chunk_1.mbox, etc. in numerical order.
+// It utilizes multithreading to speed up the processing of large mbox files by distributing 
+// the workload across multiple CPU cores, but it requires enough memory to load each chunk file. 
+// The tool takes two command-line arguments: the path to the input directory containing chunk files
+// and the output directory where a Maildir structure (cur/new/tmp) will be created and the compressed 
+// .eml.gz files will be saved in the cur subdirectory with continuous numbering across chunks.
 
-// Compile with  g++ -O3 -std=c++23 -pthread -lstdc++fs -o mbox2eml mbox2eml.cc 
+// Compile with  g++ -O3 -std=c++23 -pthread -lstdc++fs -lz -o mbox2eml mbox2eml.cc 
 
 
 #include <iostream>
@@ -38,6 +41,12 @@
 #include <thread>
 #include <mutex>
 #include <filesystem>
+#include <algorithm>
+#include <regex>
+#include <sstream>
+#include <iomanip>
+#include <cstring>
+#include <zlib.h>
 
 namespace fs = std::filesystem;
 
@@ -73,21 +82,126 @@ std::vector<Email> extractEmails(const std::string& mbox_file) {
   return emails;
 }
 
-// Function to save an email to an eml file
+// Function to create Maildir structure
+void createMaildirStructure(const std::string& output_dir) {
+  try {
+    // Create main output directory if it doesn't exist
+    fs::create_directories(output_dir);
+    
+    // Create Maildir subdirectories
+    fs::create_directory(output_dir + "/cur");
+    fs::create_directory(output_dir + "/new");
+    fs::create_directory(output_dir + "/tmp");
+    
+    std::cout << "Created Maildir structure in " << output_dir << std::endl;
+  } catch (const std::exception& e) {
+    std::cerr << "Error creating Maildir structure: " << e.what() << std::endl;
+    throw;
+  }
+}
+
+// Function to find and sort chunk files
+std::vector<std::string> findChunkFiles(const std::string& input_dir) {
+  std::vector<std::pair<int, std::string>> chunk_files;
+  std::regex chunk_pattern(R"(chunk_(\d+)\.mbox)");
+  
+  try {
+    for (const auto& entry : fs::directory_iterator(input_dir)) {
+      if (entry.is_regular_file()) {
+        std::string filename = entry.path().filename().string();
+        std::smatch match;
+        
+        if (std::regex_match(filename, match, chunk_pattern)) {
+          int chunk_number = std::stoi(match[1].str());
+          chunk_files.emplace_back(chunk_number, entry.path().string());
+        }
+      }
+    }
+  } catch (const std::exception& e) {
+    std::cerr << "Error reading directory: " << e.what() << std::endl;
+  }
+  
+  // Sort by chunk number
+  std::sort(chunk_files.begin(), chunk_files.end());
+  
+  // Extract just the file paths
+  std::vector<std::string> sorted_files;
+  for (const auto& pair : chunk_files) {
+    sorted_files.push_back(pair.second);
+  }
+  
+  return sorted_files;
+}
+
+// Function to compress data using gzip
+std::string compressGzip(const std::string& data) {
+  z_stream zs;
+  memset(&zs, 0, sizeof(zs));
+  
+  if (deflateInit2(&zs, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+    throw std::runtime_error("deflateInit2 failed");
+  }
+  
+  zs.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(data.data()));
+  zs.avail_in = data.size();
+  
+  int ret;
+  char outbuffer[32768];
+  std::string compressed;
+  
+  do {
+    zs.next_out = reinterpret_cast<Bytef*>(outbuffer);
+    zs.avail_out = sizeof(outbuffer);
+    
+    ret = deflate(&zs, Z_FINISH);
+    
+    if (compressed.size() < zs.total_out) {
+      compressed.append(outbuffer, zs.total_out - compressed.size());
+    }
+  } while (ret == Z_OK);
+  
+  deflateEnd(&zs);
+  
+  if (ret != Z_STREAM_END) {
+    throw std::runtime_error("Error during compression");
+  }
+  
+  return compressed;
+}
+
+// Function to save an email to a compressed eml.gz file in Maildir cur directory
 void saveEmail(const Email& email, const std::string& output_dir, int email_count) {
-  std::string filename = output_dir + "/email_" + std::to_string(email_count) + ".eml";
-  std::ofstream outfile(filename);
-  outfile << email.content;
+  std::ostringstream filename_stream;
+  filename_stream << output_dir << "/cur/email_" << std::setfill('0') << std::setw(9) << email_count << ".eml.gz";
+  std::string filename = filename_stream.str();
+  
+  try {
+    std::string compressed_content = compressGzip(email.content);
+    
+    std::ofstream outfile(filename, std::ios::binary);
+    if (!outfile) {
+      throw std::runtime_error("Failed to create output file: " + filename);
+    }
+    
+    outfile.write(compressed_content.data(), compressed_content.size());
+    if (!outfile) {
+      throw std::runtime_error("Failed to write compressed data to: " + filename);
+    }
+  } catch (const std::exception& e) {
+    std::cerr << "Error saving email " << email_count << ": " << e.what() << std::endl;
+  }
 }
 
 // Worker thread function to process emails
 void workerThread(const std::vector<Email>& emails, const std::string& output_dir, 
-                  int start_index, int end_index, std::mutex& output_mutex) {
+                  int start_index, int end_index, int& global_counter, std::mutex& output_mutex) {
   for (int i = start_index; i < end_index; ++i) {
+    int email_number;
     {
       std::lock_guard<std::mutex> lock(output_mutex);
-      saveEmail(emails[i], output_dir, i + 1);
-      std::cout << "Saved email_" << i + 1 << ".eml" << std::endl;
+      email_number = global_counter++;
+      saveEmail(emails[i], output_dir, email_number);
+      // std::cout << "Saved email_" << email_number << ".eml" << std::endl;
     }
   }
 }
@@ -95,25 +209,33 @@ void workerThread(const std::vector<Email>& emails, const std::string& output_di
 int main(int argc, char* argv[]) {
   // Check for correct number of arguments
   if (argc != 3) {
-    std::cerr << "mbox2eml: Extract individual email messages from an mbox file and save them as separate .eml files." << std::endl;
+    std::cerr << "mbox2eml: Extract individual email messages from chunked mbox files and save them as separate compressed .eml.gz files in Maildir format." << std::endl;
     std::cerr << "Error: Incorrect number of arguments." << std::endl;
-    std::cerr << "Usage: " << argv[0] << " <mbox_file> <output_directory>" << std::endl;
+    std::cerr << "Usage: " << argv[0] << " <input_directory> <output_directory>" << std::endl;
+    std::cerr << "Input directory should contain files named: chunk_0.mbox, chunk_1.mbox, etc." << std::endl;
     return 1;
   }
 
-  std::string mbox_file = argv[1];
+  std::string input_dir = argv[1];
   std::string output_dir = argv[2];
 
-  // Create the output directory if it doesn't exist
+  // Create Maildir structure in output directory
   try {
-  fs::create_directory(output_dir);
+    createMaildirStructure(output_dir);
   } catch (const std::exception& e) {
-    std::cerr << "Error creating output directory: " << e.what() << std::endl;
+    std::cerr << "Error creating Maildir structure: " << e.what() << std::endl;
     return 1;
   }
-  // Extract emails from the mbox file
-  std::vector<Email> emails = extractEmails(mbox_file);
-  std::cout << "Extracted " << emails.size() << " emails." << std::endl;
+
+  // Find all chunk files in the input directory
+  std::vector<std::string> chunk_files = findChunkFiles(input_dir);
+  if (chunk_files.empty()) {
+    std::cerr << "No chunk files found in " << input_dir << std::endl;
+    std::cerr << "Looking for files named: chunk_0.mbox, chunk_1.mbox, etc." << std::endl;
+    return 1;
+  }
+
+  std::cout << "Found " << chunk_files.size() << " chunk files to process." << std::endl;
 
   // Determine the number of threads to use (e.g., based on CPU cores)
   int num_threads = std::thread::hardware_concurrency();
@@ -121,30 +243,52 @@ int main(int argc, char* argv[]) {
     num_threads = 2; // Default to 2 threads if hardware concurrency is unknown
   }
 
-  // Calculate the number of emails per thread
-  int emails_per_thread = emails.size() / num_threads;
-  int remaining_emails = emails.size() % num_threads;
-
-  // Create and launch worker threads
-  std::vector<std::thread> threads;
   std::mutex output_mutex;
-  int start_index = 0;
+  int global_email_counter = 0;
+  int total_emails_processed = 0;
 
-  for (int i = 0; i < num_threads; ++i) {
-    int end_index = start_index + emails_per_thread;
-    if (i < remaining_emails) {
-      end_index++;
+  // Process each chunk file sequentially to maintain order
+  for (const std::string& chunk_file : chunk_files) {
+    std::cout << "Processing " << fs::path(chunk_file).filename().string() << "..." << std::endl;
+    
+    // Extract emails from current chunk
+    std::vector<Email> emails = extractEmails(chunk_file);
+    std::cout << "Extracted " << emails.size() << " emails from current chunk." << std::endl;
+    
+    if (emails.empty()) {
+      std::cout << "No emails found in " << fs::path(chunk_file).filename().string() << ", skipping." << std::endl;
+      continue;
     }
-    threads.emplace_back(workerThread, std::ref(emails), output_dir, start_index, end_index, 
-                         std::ref(output_mutex));
-    start_index = end_index;
+
+    // Calculate the number of emails per thread
+    int emails_per_thread = emails.size() / num_threads;
+    int remaining_emails = emails.size() % num_threads;
+
+    // Create and launch worker threads for current chunk
+    std::vector<std::thread> threads;
+    int start_index = 0;
+
+    for (int i = 0; i < num_threads; ++i) {
+      int end_index = start_index + emails_per_thread;
+      if (i < remaining_emails) {
+        end_index++;
+      }
+      threads.emplace_back(workerThread, std::ref(emails), output_dir, start_index, end_index, 
+                           std::ref(global_email_counter), std::ref(output_mutex));
+      start_index = end_index;
+    }
+
+    // Wait for all threads to finish processing current chunk
+    for (auto& thread : threads) {
+      thread.join();
+    }
+    
+    total_emails_processed += emails.size();
+    std::cout << "Completed processing " << fs::path(chunk_file).filename().string() 
+              << " (" << emails.size() << " emails)" << std::endl;
   }
 
-  // Wait for all threads to finish
-  for (auto& thread : threads) {
-    thread.join();
-  }
-
-  std::cout << "Finished processing all emails." << std::endl;
+  std::cout << "Finished processing all " << chunk_files.size() << " chunks." << std::endl;
+  std::cout << "Total emails processed: " << total_emails_processed << std::endl;
   return 0;
 }

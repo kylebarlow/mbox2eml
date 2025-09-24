@@ -46,6 +46,9 @@
 #include <sstream>
 #include <iomanip>
 #include <cstring>
+#include <chrono>
+#include <random>
+#include <unistd.h>
 #include <zlib.h>
 
 namespace fs = std::filesystem;
@@ -53,7 +56,60 @@ namespace fs = std::filesystem;
 // Structure to hold email data
 struct Email {
   std::string content;
+  std::time_t timestamp;
 };
+
+// Function to parse RFC 2822 date format to timestamp
+std::time_t parseEmailDate(const std::string& date_str) {
+  // Common email date formats to try
+  std::vector<std::string> formats = {
+    "%a, %d %b %Y %H:%M:%S %z",     // RFC 2822: "Mon, 01 Jan 2024 12:00:00 +0000"
+    "%d %b %Y %H:%M:%S %z",        // "01 Jan 2024 12:00:00 +0000"
+    "%a, %d %b %Y %H:%M:%S",       // Without timezone
+    "%d %b %Y %H:%M:%S"
+  };
+  
+  std::tm tm = {};
+  for (const auto& format : formats) {
+    std::istringstream ss(date_str);
+    ss >> std::get_time(&tm, format.c_str());
+    if (!ss.fail()) {
+      return std::mktime(&tm);
+    }
+  }
+  
+  // If parsing fails, return current time as fallback
+  auto now = std::chrono::system_clock::now();
+  return std::chrono::system_clock::to_time_t(now);
+}
+
+// Function to extract Date header from email content
+std::time_t extractEmailTimestamp(const std::string& content) {
+  std::istringstream stream(content);
+  std::string line;
+  
+  // Skip the "From " line and look for Date header
+  while (std::getline(stream, line)) {
+    if (line.empty()) {
+      // End of headers, no Date found
+      break;
+    }
+    
+    // Check for Date header (case-insensitive)
+    if (line.length() > 5 && 
+        (line.substr(0, 5) == "Date:" || line.substr(0, 5) == "date:")) {
+      std::string date_part = line.substr(5);
+      // Remove leading/trailing whitespace
+      date_part.erase(0, date_part.find_first_not_of(" \t"));
+      date_part.erase(date_part.find_last_not_of(" \t\r\n") + 1);
+      return parseEmailDate(date_part);
+    }
+  }
+  
+  // Fallback to current time if no Date header found
+  auto now = std::chrono::system_clock::now();
+  return std::chrono::system_clock::to_time_t(now);
+}
 
 // Function to extract individual emails from the mbox file
 std::vector<Email> extractEmails(const std::string& mbox_file) {
@@ -66,6 +122,7 @@ std::vector<Email> extractEmails(const std::string& mbox_file) {
     if (line.starts_with("From ")) { // use c++20 feature
       // Start of a new email
       if (!current_email.content.empty()) {
+        current_email.timestamp = extractEmailTimestamp(current_email.content);
         emails.push_back(current_email);
       }
       current_email.content = line + "\n";
@@ -76,6 +133,7 @@ std::vector<Email> extractEmails(const std::string& mbox_file) {
 
   // Add the last email
   if (!current_email.content.empty()) {
+    current_email.timestamp = extractEmailTimestamp(current_email.content);
     emails.push_back(current_email);
   }
 
@@ -138,7 +196,8 @@ std::string compressGzip(const std::string& data) {
   z_stream zs;
   memset(&zs, 0, sizeof(zs));
   
-  if (deflateInit2(&zs, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+  // Use faster compression level for better throughput in multi-threaded scenario
+  if (deflateInit2(&zs, Z_BEST_SPEED, Z_DEFLATED, 15 + 16, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
     throw std::runtime_error("deflateInit2 failed");
   }
   
@@ -169,11 +228,22 @@ std::string compressGzip(const std::string& data) {
   return compressed;
 }
 
+// Function to generate Maildir-compatible filename using email timestamp
+std::string generateMaildirFilename(const Email& email, int email_count) {
+  // Use the email's actual timestamp instead of current time
+  std::ostringstream unique_id;
+  unique_id << email.timestamp << ".M" << email_count << "P" << getpid() << "_mbox2eml";
+  
+  // Add flags section - :2,S (Seen flag for processed emails)
+  std::string filename = unique_id.str() + ":2,S";
+  
+  return filename;
+}
+
 // Function to save an email to a compressed eml.gz file in Maildir cur directory
 void saveEmail(const Email& email, const std::string& output_dir, int email_count) {
-  std::ostringstream filename_stream;
-  filename_stream << output_dir << "/cur/email_" << std::setfill('0') << std::setw(9) << email_count << ".eml.gz";
-  std::string filename = filename_stream.str();
+  std::string maildir_filename = generateMaildirFilename(email, email_count);
+  std::string filename = output_dir + "/cur/" + maildir_filename;
   
   try {
     std::string compressed_content = compressGzip(email.content);
@@ -194,15 +264,23 @@ void saveEmail(const Email& email, const std::string& output_dir, int email_coun
 
 // Worker thread function to process emails
 void workerThread(const std::vector<Email>& emails, const std::string& output_dir, 
-                  int start_index, int end_index, int& global_counter, std::mutex& output_mutex) {
+                  int start_index, int end_index, int& global_counter, std::mutex& counter_mutex) {
   for (int i = start_index; i < end_index; ++i) {
+    // Get email number under minimal lock
     int email_number;
     {
-      std::lock_guard<std::mutex> lock(output_mutex);
+      std::lock_guard<std::mutex> lock(counter_mutex);
       email_number = global_counter++;
-      saveEmail(emails[i], output_dir, email_number);
-      // std::cout << "Saved email_" << email_number << ".eml" << std::endl;
     }
+    
+    // Do all the heavy work (compression, I/O) outside the lock
+    saveEmail(emails[i], output_dir, email_number);
+    
+    // Optional: uncomment for progress tracking (but adds lock contention)
+    // {
+    //   std::lock_guard<std::mutex> lock(counter_mutex);
+    //   std::cout << "Saved email_" << email_number << std::endl;
+    // }
   }
 }
 
@@ -243,7 +321,7 @@ int main(int argc, char* argv[]) {
     num_threads = 2; // Default to 2 threads if hardware concurrency is unknown
   }
 
-  std::mutex output_mutex;
+  std::mutex counter_mutex;
   int global_email_counter = 0;
   int total_emails_processed = 0;
 
@@ -274,7 +352,7 @@ int main(int argc, char* argv[]) {
         end_index++;
       }
       threads.emplace_back(workerThread, std::ref(emails), output_dir, start_index, end_index, 
-                           std::ref(global_email_counter), std::ref(output_mutex));
+                           std::ref(global_email_counter), std::ref(counter_mutex));
       start_index = end_index;
     }
 

@@ -235,7 +235,8 @@ std::string generateMaildirFilename(const Email& email, int email_count) {
   unique_id << email.timestamp << ".M" << email_count << "P" << getpid() << "_mbox2eml";
   
   // Add flags section - :2,S (Seen flag for processed emails)
-  std::string filename = unique_id.str() + ":2,S";
+  // Include .gz extension so mu can properly identify compressed email files
+  std::string filename = unique_id.str() + ":2,S.gz";
   
   return filename;
 }
